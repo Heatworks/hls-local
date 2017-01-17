@@ -37,18 +37,4 @@ module.exports = function(app){
         client.del(accessToken);
         res.send({});
     });
-
-    app.get('/iam/', function(req, res){
-        res.send({
-            policy: {
-                'hls:*': {
-                    resources: [
-                        "*"
-                    ]
-                }
-            }
-        })
-    });
-
-    //other routes..
 }
