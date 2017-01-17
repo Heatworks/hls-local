@@ -1,0 +1,23 @@
+{
+	"compilerOptions": {
+		"module": "commonjs",
+		"removeComments": false,
+		"preserveConstEnums": true,
+		"sourceMap": true,
+		"experimentalDecorators": true,
+		"declaration": true,
+		"outDir": "build-server",
+		"rootDirs": ["src"],
+		"target": "es6",
+        "jsx": "react"
+	},
+	"exclude": [
+		"node_modules",
+		"test"
+	],
+	"include": [
+		"./src/**/*.ts",
+        "./src/**/*.tsx",
+		"./typings/index.d.ts"
+	]
+}
