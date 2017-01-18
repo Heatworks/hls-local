@@ -12,7 +12,11 @@ const path = require('path')
 
 const app = express();
 
+var bodyParser = require("body-parser");
+app.use(bodyParser.json());
+
 require('./iam/routes')(app);
+require('./dac/routes')(app);
 
 const port = process.env.PORT || 4000;
 const env = process.env.NODE_ENV || 'production';

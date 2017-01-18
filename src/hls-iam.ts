@@ -190,13 +190,13 @@ export class DefaultApi {
     public setApiKey(key: DefaultApiApiKeys, value: string) {
         this.authentications[DefaultApiApiKeys[key]].apiKey = value;
     }
-    private extendObj<T1,T2>(objA: T1|T2, objB: T2): T1|T2 {
+    private extendObj<T1,T2>(objA: T1, objB: T2) {
         for(let key in objB){
             if(objB.hasOwnProperty(key)){
                 objA[key] = objB[key];
             }
         }
-        return objA;
+        return <T1&T2>objA;
     }
     /**
      * 

@@ -19,6 +19,7 @@
     "@types/redis": "^0.12.34",
     "@types/request": "0.0.39",
     "bluebird": "^3.4.7",
+    "body-parser": "^1.16.0",
     "express": "^4.14.0",
     "http": "0.0.0",
     "redis": "^2.6.5",
