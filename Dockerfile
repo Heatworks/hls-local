@@ -8,6 +8,5 @@ ADD tsconfig.server.json tsconfig.server.json
 
 RUN npm install
 
-EXPOSE 80
-EXPOSE 443
+EXPOSE 4000
 CMD ["npm", "start"]
