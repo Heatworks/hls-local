@@ -1,40 +1,76 @@
-//import * as DAC from "../hls-dac"
+import * as DAC from "../hls-dac"
 import * as redis from "redis"
+import * as fs from 'fs'
+import * as Promise from "bluebird"
 
 module.exports = function(app){
 
-    //var api = new DAC.DefaultApi()
-    //api.setApiKey(DAC.DefaultApiApiKeys.oAuth_2_0, process.env.HLS_ACCESS_TOKEN)
+    var currentFile = createCacheFile();
+
+    var update = function (file, updateCache) {
+        setTimeout(() => {
+            if (updateCache) {
+                currentFile = createCacheFile()
+                update(currentFile, true);
+            }
+            fs.readFile(file, (error, data) => {
+                if (error) {
+                    console.warn(error)
+                    return;
+                }
+                uploadData(data.toString()).then(() => {
+                    fs.unlink(file, (err) => {
+                        if (err) {
+                            console.warn(error)
+                            return;
+                        }
+                        console.log('Removed Cache: '+ file);
+                    });
+                }).catch((error) => {
+                    console.log('Error Uploading Cache: '+ file);
+                    if (error.code == 'ENOTFOUND' && error.syscall == 'getaddrinfo') {
+                        console.log('Will retry indefinitly...');
+                        update(file, false)
+                    }
+                    console.warn(error);
+                })
+            })
+        }, 10000)
+    }
+
+    update(currentFile, true);
 
     app.post('/dac/Data', function(req, res) {
-        console.log(req.body)
         res.send({
             "message":"Received data.",
             "body": req.body
         })
-
-        /*
-			elements = packet.payload.toString().split(",");
-			console.log(`${client.organization}: topic: ${packet.topic} ${elements.join(", ")}`);
-			if (elements.length == 2) {
-				const [ timestamp, value ] = elements
-				var elements = packet.topic.split("/devices/")[1].split("/")
-				var channel = elements.pop();
-				var timestampDate = new Date(0);
-				timestampDate.setUTCMilliseconds(timestamp * 1000)
-				insertRecord(client.organization_id, timestampDate, channel, elements.join("/"), parseFloat(value), parseInt(value));
-			}*/
+        fs.appendFileSync(currentFile, [req.body.organizationId, req.body.topic, req.body.payload ].join(",")+"\n", (err) => {
+            if (err) {
+                console.warn(err);
+            }
+        });
     });
 }
 
 
-function insertRecord(organization_id, timestamp, channel, device, floatValue, integerValue) {
-	var params = [organization_id, timestamp, channel, device, floatValue, integerValue];
-	console.log(params);
-	/* query = "INSERT INTO lab_messages VALUES ($1, $2, $3, $4, $5, $6);"
-	client.query(query, params, function (err, result) {
-		if (err) {
-			console.warn(err)
-		}
-	}); */
+var api = new DAC.DefaultApi()
+api.setApiKey(DAC.DefaultApiApiKeys.oAuth_2_0, process.env.HLS_ACCESS_TOKEN)
+
+function uploadData(data) {
+    if (data == "") {
+        return new Promise(function(resolve, reject) {
+            resolve()
+        })
+    }
+    console.log('Send data to server.')
+    var fileName = 'hls.dac.'+new Date().toISOString()+'.csv';
+    return api.dataPut(data, 'text/csv', process.env.HLS_ORGANIZATION_ID, fileName )
+}
+
+function createCacheFile() {
+    var time = new Date().getTime();
+    var newFile = `/tmp/hls.dac.buffer.${time}.csv`;
+    fs.writeFileSync(newFile, '')
+    return newFile;
 }
