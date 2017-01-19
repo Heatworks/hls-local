@@ -5,7 +5,8 @@
   "main": "build/server.js",
   "scripts": {
     "postinstall": "npm run build-server",
-    "start": "node build-server/server.js",
+    "prestart": "npm run build-server",
+    "start": "nf start",
     "test": "mocha",
     "build-server": "node_modules/typescript/bin/tsc --project tsconfig.server.json",
     "build-server+watch": "node_modules/typescript/bin/tsc --project tsconfig.server.json --watch",
@@ -21,6 +22,7 @@
     "bluebird": "^3.4.7",
     "body-parser": "^1.16.0",
     "express": "^4.14.0",
+    "foreman": "^2.0.0",
     "http": "0.0.0",
     "redis": "^2.6.5",
     "request": "^2.79.0",
