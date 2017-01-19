@@ -5,7 +5,7 @@
   "main": "build/server.js",
   "scripts": {
     "postinstall": "npm run build-server",
-    "start": "nf start",
+    "start": "node build-server/server.js",
     "test": "mocha",
     "build-server": "node_modules/typescript/bin/tsc --project tsconfig.server.json",
     "build-server+watch": "node_modules/typescript/bin/tsc --project tsconfig.server.json --watch",
