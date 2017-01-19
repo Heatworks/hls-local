@@ -7,7 +7,6 @@ ADD Procfile Procfile
 ADD tsconfig.server.json tsconfig.server.json
 
 RUN npm install
-RUN ls src
 
 EXPOSE 80
 EXPOSE 443
