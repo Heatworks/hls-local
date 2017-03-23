@@ -7,3 +7,5 @@ semantic/dist/
 
 # This should be allowed in the actual project.
 semantic/
+
+npm-debug.log
