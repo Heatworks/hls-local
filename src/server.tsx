@@ -17,6 +17,7 @@ app.use(bodyParser.json());
 
 require('./iam/routes')(app);
 require('./dac/routes')(app);
+require('./scripts/routes')(app);
 
 const port = process.env.PORT || 4000;
 const env = process.env.NODE_ENV || 'production';
