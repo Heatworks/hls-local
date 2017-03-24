@@ -6,12 +6,24 @@ var child_process = require('child_process');
 
 module.exports = function(app){
     var currentRuns = {}
-    var client = mqtt.connect('mqtt://hls-local-server.local:1883', {
+    var client = mqtt.connect(process.env.HLS_MQTT_BROKER, {
         username: 'HLS:AccessToken',
         password: process.env.HLS_ACCESS_TOKEN
     })
 
+    client.on("connect", () => {
+        console.log('Successfully connected to MQTT client.')
+    })
+
+    client.on("error", (error) => {
+        console.log('Error with MQTT client.', error)
+    })
+
     app.get('/scripts/Run/Start', function(req, res) {
+        if (client.connected == false) {
+            res.status(500).send({"message": `Could not connect to MQTT client.`})
+            return;
+        }
         var runName = req.query.name;
         var run = getRun(runName);
         if (run.running) {
@@ -19,7 +31,8 @@ module.exports = function(app){
             return;
         }
         var defaults = {
-            AccessToken: process.env.HLS_ACCESS_TOKEN,
+            HLS_ACCESS_TOKEN: process.env.HLS_ACCESS_TOKEN,
+            HLS_MQTT_BROKER: process.env.HLS_MQTT_BROKER,
             NODE: process.env.NODE,
             PATH: process.env.PATH
         }
@@ -41,6 +54,7 @@ module.exports = function(app){
 
         var runScript = () => {
             runlog(client, run, "Start")
+            console.log(`[${npm} start] in [${scriptPath}]`);
             var run_process = child_process.spawn('npm', ['start'], {
                 cwd: scriptPath,
                 env: Object.assign({}, defaults, script.defaultEnvironment, environment),
@@ -121,6 +135,16 @@ var scripts = {
             "increase": 1
         },
         "environment": "nodejs"
+    },
+    "/organizations/heatworks/scripts/model-1x/CycleFlowMonitor": {
+        "name":"/organizations/heatworks/scripts/model-1x/CycleFlowMonitor",
+        "description": "",
+        "tags": {
+
+        },
+        "defaultEnvironment": {
+        },
+        "environment": "nodejs"
     }
 }
 
@@ -144,7 +168,21 @@ var runs = {
             "/organizations/heatworks/devices/solenoid6/A/2Control":"FlowControl"
         },
         "running": false
+    },
+    "/organizations/heatworks/scripts/model-1x/CycleFlowMonitor/test-station-a": {
+        "name":  "/organizations/heatworks/scripts/model-1x/CycleFlowMonitor/test-station-a",
+        "description": "",
+        "tags": {
+        },
+        "channels": {
+            "/organizations/heatworks/devices/solenoid6/A/1Control":"WaterIn",
+            "/organizations/heatworks/devices/solenoid6/A/6Control":"Power",
+            "/organizations/heatworks/devices/analog8/A/3":"Flow",
+            "/organizations/heatworks/devices/analog8/A/2":"Current"
+        },
+        "running": false
     }
+    
 }
 
 function getRun(name) {
@@ -156,6 +194,7 @@ function putRun(name, run) {
 }
 
 function runlog(client, run, log) {
+    console.log(log);
     var parts = run.name.split("/scripts/")
     var topic = `${parts[0]}/devices/scripts/${parts[1]}`
     var lines = log.split("\n");
