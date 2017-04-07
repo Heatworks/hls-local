@@ -51,6 +51,19 @@ module.exports = function(app){
             }
         });
     });
+
+    app.post('/dac/Recovery', function(req, res) {
+        var recoveredFiles = [];
+        fs.readdir('/tmp/', (err, files) => {
+            files.forEach((file) => {
+                recoveredFiles.push(file);
+            })
+            res.send({
+                "message":"Recovered files.",
+                "files": recoveredFiles
+            })
+        });
+    })
 }
 
 
