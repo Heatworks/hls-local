@@ -41,10 +41,7 @@ module.exports = function(app){
     update(currentFile, true);
 
     app.post('/dac/Data', function(req, res) {
-        res.send({
-            "message":"Received data.",
-            "body": req.body
-        })
+        res.status(200).send({})
         fs.appendFileSync(currentFile, [req.body.organizationId, req.body.topic, req.body.payload ].join(",")+"\n", (err) => {
             if (err) {
                 console.warn(err);
@@ -56,10 +53,13 @@ module.exports = function(app){
         var recoveredFiles = [];
         fs.readdir('/tmp/', (err, files) => {
             files.forEach((file) => {
-                recoveredFiles.push(file);
+                if (/hls.dac.buffer.[0-9]+.csv/.test(file)) {
+                    recoveredFiles.push(file);
+                    update('/tmp/'+file, false);
+                }
             })
             res.send({
-                "message":"Recovered files.",
+                "message":"Recovering files.",
                 "files": recoveredFiles
             })
         });
