@@ -1,8 +1,27 @@
-import * as IAM from "../hls-iam"
+import * as ScriptsAPI from "../hls-scripts"
 import * as redis from "redis"
+const mkdirp = require("mkdirp");
+const fs = require('fs');
+const download = require('download');
 const mqtt = require("mqtt")
 
 var child_process = require('child_process');
+
+class ScriptEnvironment {
+    env: Map<string, any>
+    channels: Map<string, string>
+}
+
+class Script {
+    defaultEnvironment: ScriptEnvironment
+    name:string
+    environments: Map<String, ScriptEnvironment>
+    files: [string]
+    version: string
+}
+
+var api = new ScriptsAPI.DefaultApi()
+api.setApiKey(ScriptsAPI.DefaultApiApiKeys.oAuth_2_0, process.env.HLS_ACCESS_TOKEN)
 
 module.exports = function(app){
     var currentRuns = {}
@@ -11,204 +30,229 @@ module.exports = function(app){
         password: process.env.HLS_ACCESS_TOKEN
     })
 
+    var redis_client = redis.createClient({
+        db: process.env.REDIS_DB,
+        port: process.env.REDIS_PORT,
+        host: process.env.REDIS_HOST
+    })
+   
     client.on("connect", () => {
-        console.log('Successfully connected to MQTT client.')
+        console.log(`Successfully connected to MQTT client.`)
     })
 
     client.on("error", (error) => {
-        console.log('Error with MQTT client.', error)
+        console.log(`Error with MQTT client.`, error)
     })
 
-    app.get('/scripts/Run/Start', function(req, res) {
+    app.get('/scripts/Start', function(req, res) {
         if (client.connected == false) {
             res.status(500).send({"message": `Could not connect to MQTT client.`})
             return;
         }
-        var runName = req.query.name;
-        var run = getRun(runName);
-        if (run.running) {
-            res.status(400).send({"message": `${run.name} is already running.`})
-            return;
-        }
-        var defaults = {
-            HLS_ACCESS_TOKEN: process.env.HLS_ACCESS_TOKEN,
-            HLS_MQTT_BROKER: process.env.HLS_MQTT_BROKER,
-            NODE: process.env.NODE,
-            PATH: process.env.PATH
-        }
-        var environment = {
-        }
-        Object.keys(run.channels).forEach((channel) => {
-            environment[run.channels[channel]] = channel;
-        })
-        console.log('Start run: '+run.name);
-        const which = require('which');
-        const npm = which.sync('npm');
-        var parts = run.name.split('/scripts/')[1].split('/')
-        parts.pop()
-        var scriptParts = run.name.split("/");
-        scriptParts.pop()
-        var script = getScript(scriptParts.join("/"));
-        var scriptPath = `/tmp/hls/scripts/`+parts.join("/");
-        console.log(`[${npm} install] in [${scriptPath}]`);
-
-        var runScript = () => {
-            runlog(client, run, "Start")
-            console.log(`[${npm} start] in [${scriptPath}]`);
-            var run_process = child_process.spawn('npm', ['start'], {
-                cwd: scriptPath,
-                env: Object.assign({}, defaults, script.defaultEnvironment, environment),
-                shell: true,
+        var scriptName = req.query.name;
+        var environment = req.query.environment;
+        console.log(`Received request to start script: ${scriptName} with environment '${environment}'.`);                                                                                                        
+        var runName;
+        var script:Script;
+        var scriptPath:string;
+        getScript(scriptName).then((_script:Script) => {
+            script = _script;
+            if (script == null) {
+                throw Error(`Failed getting script '${scriptName}'.`)
+            }
+            if (!(environment in script.environments)) {
+                throw Error(`Environment '${environment}' does not exist in ${script.name}`)
+            }
+            runName = script.name+"/"+environment;
+            return isScriptRunning(scriptName, environment);
+        }).then((running) => {
+            if (running) {
+                throw Error(`${script.name} with environment '${environment}' is already running.`);
+            }
+        }).then(() => {
+            console.log("Determining script path.");
+            var scriptNameSuffix = script.name.split('/scripts/')[1]
+            scriptPath = `/tmp/hls/scripts/`+scriptNameSuffix;
+            return new Promise((resolve, reject) => {
+                console.log("Generating script path if it does not exist.");
+                mkdirp(scriptPath, function (error) {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(scriptPath);
+                    }
+                });
             })
-
-            run_process.stdout.on('data', function (data) {
-                runlog(client, run, data.toString())
-            });
-
-            run_process.stderr.on('data', function (data) {
-                runlog(client, run, data.toString())
-            });
-
-            currentRuns[run.name] = run_process;
-            run.running = true;
-            putRun(run.name, run);
-            res.status(200).send({"message": `Started run ${run.name}.`})
-        }
-        
-        var installScript = () => {
-            child_process.exec(npm+' install', {
-                cwd: scriptPath
-            }, (error, stdout, stderr) => {
-                if (error) {
-                    console.error(`exec error: ${error}`);
-                    return;
-                }
-                console.log(`stdout: ${stdout}`);
-                console.log(`stderr: ${stderr}`);
-                //runScript.call(this)
-                setTimeout(() => {
-                    runScript.call(this)
+        }).then(() => {
+            console.log("Checking latest script version against local files.");
+            return new Promise((resolve, reject) => {
+                redis_client.get(`${script.name}:version`, (err, value) => {
+                    if (value == script.version) {
+                        resolve(false);
+                    } else {
+                        redis_client.set(`${script.name}:version`, script.version, () => {
+                            resolve(true);
+                        })
+                    }
                 })
+            }).then((needsToUpdate) => {
+                if (needsToUpdate) {
+                    console.log(`Downloading latest script files...`);
+                    return Promise.all(script.files.map((file) => {
+                        console.log(`Get file ${file}.`)
+                        return api.fileGet(script.name, file).then((response) => {
+                            console.log(`Downloading file ${response.body["url"]} to ${scriptPath}/${file}...`)
+                            return download(response.body["url"], `${scriptPath}`);
+                        })
+                    })).then(() => {
+                        console.log(`Downloaded latest script files.`);
+                    })
+                } else {
+                    console.log(`Script files meet current version (${script.version}).`);
+                }
+                return needsToUpdate;
             })
-        }
-        installScript()
+        }).then(() => {
+            const which = require('which');
+            const npm = which.sync('npm');
+
+            var defaults = {
+                HLS_ACCESS_TOKEN: process.env.HLS_ACCESS_TOKEN,
+                HLS_MQTT_BROKER: process.env.HLS_MQTT_BROKER,
+                NODE: process.env.NODE,
+                PATH: process.env.PATH
+            }
+            var env = {
+            }
+            Object.keys(script.environments[environment].channels).forEach((channel) => {
+                env['channels.'+channel] = script.environments[environment].channels[channel];
+            })
+
+
+            var runScript = () => {
+                console.log(`Starting script ${script.name} with environment '${environment}'...`);                                                                                                        
+                runlog(client, runName, "Start")          
+                var finalizedEnvironment = Object.assign({}, defaults, script.defaultEnvironment.env, script.environments[environment].env, env);                                
+                console.log(`cd ${scriptPath} && ${npm} start`); 
+
+                var run_process = child_process.spawn('npm', ['start'], {             
+                    cwd: scriptPath,                                                  
+                    env: finalizedEnvironment,
+                    shell: true,                                                             
+                    detatched: true                                                          
+                })
+                                                                                            
+                run_process.stdout.on('data', function (data) {                              
+                    runlog(client, runName, data.toString())                                     
+                });                                                                          
+                                                                                            
+                run_process.stderr.on('data', function (data) {                              
+                    runlog(client, runName, data.toString())                                     
+                });
+
+                var killed = function (code) {
+                    runlog(client, runName, "Exit: "+code)
+                    setScriptKilled(scriptName, environment);
+                }
+                run_process.on('kill', killed)
+                run_process.on('close', killed) 
+                run_process.on('error', killed)
+
+                runningEnvironments[runName] = {
+                    running: true,
+                    process: run_process
+                }                                     
+                res.status(200).send({"message": `Started script ${script.name} with environment '${environment}'`})                
+            }
+            
+            var installScript = () => { 
+                console.log(`Installing npm packages for ${script.name} with environment '${environment}'`);                                                     
+                console.log(`cd ${scriptPath} && ${npm} install`);
+                child_process.exec(npm+' install', {                                         
+                    cwd: scriptPath                                                          
+                }, (error, stdout, stderr) => {                                              
+                    if (error) {        
+                        console.error(` ${error}`);                                       
+                        res.status(400).send({"message": error})
+                        return;                                          
+                    }                                                                        
+                    console.log(`stdout: ${stdout}`);                                        
+                    console.log(`stderr: ${stderr}`);                                        
+
+                    setTimeout(() => {                                                       
+                        runScript.call(this)                                                 
+                    })                                                                       
+                })                                                                           
+            }       
+
+            installScript()
+        }).catch((error:Error) => {
+            res.status(400).send({"message": error.message})
+            console.log(JSON.stringify(error))
+        });
+        
     });
 
-    app.get('/scripts/Run/Stop', function(req, res) {
-        var runName = req.query.name;
-        var run = getRun(runName);
-        if (run.running == false) {
-            res.status(400).send({"message": `${run.name} is not running.`})
+    app.get('/scripts/Stop', function(req, res) {
+        var scriptName = req.query.name;
+        var environment = req.query.environment;
+        var runName = scriptName+"/"+environment;
+        var run = isScriptRunning(scriptName, environment);
+        if (!run) {
+            res.status(400).send({"message": `${runName} is not running.`})
             return;
         }
-        runlog(client, run, "Stop")
-        console.log('End run: '+run.name);
-        if (run.name in currentRuns) {
-            currentRuns[run.name].kill()
+        console.log('End run: '+runName);
+        run.process.kill()
+        res.status(200).send({"message": `Stopped run ${runName}.`})
+    });
+
+    app.get('/scripts/Status', function(req, res) {
+        var scriptName = req.query.name;
+        var environment = req.query.environment;
+        var status = isScriptRunning(scriptName, environment);
+        if (status) {
+            res.status(400).send({"message": `${scriptName}/${environment} is running.`, "status": true})
+            return;
+        } else {
+            res.status(400).send({"message": `${scriptName}/${environment} is not running.`, "status": false})
+            return;
         }
-        run.running = false;
-        putRun(run.name, run);
-        res.status(200).send({"message": `Stopped run ${run.name}.`})
     });
 }
-
-var scripts = {
-    "/organizations/heatworks/scripts/model-1x/CycleFlowRandom": {
-        "name":"/organizations/heatworks/scripts/model-1x/CycleFlowRandom",
-        "description": "",
-        "tags": {
-
-        },
-        "defaultEnvironment": {
-
-        },
-        "environment": "nodejs"
-    },
-    "/organizations/heatworks/scripts/model-1x/CycleFlowInterval": {
-        "name":"/organizations/heatworks/scripts/model-1x/CycleFlowInterval",
-        "description": "",
-        "tags": {
-
-        },
-        "defaultEnvironment": {
-            "interval": 1,
-            "increase": 1
-        },
-        "environment": "nodejs"
-    },
-    "/organizations/heatworks/scripts/model-1x/CycleFlowMonitor": {
-        "name":"/organizations/heatworks/scripts/model-1x/CycleFlowMonitor",
-        "description": "",
-        "tags": {
-
-        },
-        "defaultEnvironment": {
-        },
-        "environment": "nodejs"
-    }
-}
-
-var runs = {
-    "/organizations/heatworks/scripts/model-1x/CycleFlowRandom/test-station-a": {
-        "name":  "/organizations/heatworks/scripts/model-1x/CycleFlowRandom/test-station-a",
-        "description": "",
-        "tags": {
-        },
-        "channels": {
-            "/organizations/heatworks/devices/solenoid6/A/2Control":"FlowControl"
-        },
-        "running": false
-    },
-    "/organizations/heatworks/scripts/model-1x/CycleFlowInterval/test-station-a": {
-        "name":  "/organizations/heatworks/scripts/model-1x/CycleFlowInterval/test-station-a",
-        "description": "",
-        "tags": {
-        },
-        "channels": {
-            "/organizations/heatworks/devices/solenoid6/A/2Control":"FlowControl"
-        },
-        "running": false
-    },
-    "/organizations/heatworks/scripts/model-1x/CycleFlowMonitor/test-station-a": {
-        "name":  "/organizations/heatworks/scripts/model-1x/CycleFlowMonitor/test-station-a",
-        "description": "",
-        "tags": {
-        },
-        "channels": {
-            "/organizations/heatworks/devices/solenoid6/A/1Control":"WaterIn",
-            "/organizations/heatworks/devices/solenoid6/A/6Control":"Power",
-            "/organizations/heatworks/devices/analog8/A/3":"Flow",
-            "/organizations/heatworks/devices/analog8/A/2":"Current"
-        },
-        "running": false
-    }
-    
-}
-
-function getRun(name) {
-    return runs[name];
-}
-function putRun(name, run) {
-    runs[name] = run;
-    return run;
-}
-
-function runlog(client, run, log) {
-    console.log(log);
-    var parts = run.name.split("/scripts/")
-    var topic = `${parts[0]}/devices/scripts/${parts[1]}`
-    var lines = log.split("\n");
-    lines.forEach((line) => {
-        if (line.length > 0) {
-            publishLine(client, topic, line)
-        }
+                                                                                                     
+function runlog(client, run, log) {                                                                              
+    console.log(`[${run}] ${log}`);                                                                                            
+    var parts = run.split("/scripts/")                                                                      
+    var topic = `${parts[0]}/devices/scripts/${parts[1]}`                                                        
+    var lines = log.split("\n");                                                                                 
+    lines.forEach((line) => {                                                                                    
+        if (line.length > 0) {                                                                                   
+            publishLine(client, topic, line)                                                                     
+        }                                                                                                        
+    })                                                                                                           
+}                                                                                                                
+function publishLine(client, topic, line) {                                                                      
+    var date = new Date();                                                                                       
+    client.publish(topic, [ date.getTime() / 1000, `"${line}"` ].join(","));                                     
+}                                                                                                                
+                                                                                                                 
+function getScript(name) {    
+    return api.scriptGet(name).then((response) => {
+        return response.body
     })
 }
-function publishLine(client, topic, line) {
-    var date = new Date();
-    client.publish(topic, [ date.getTime() / 1000, `"${line}"` ].join(","));
+
+var runningEnvironments = {};
+
+function isScriptRunning(name, environment) {
+    var runName = name + "/" + environment;
+    if (runName in runningEnvironments) {
+        return runningEnvironments[runName];
+    }
+    return false;
 }
 
-function getScript(name) {
-    return scripts[name];
+function setScriptKilled(name, environment) {
+    delete runningEnvironments[name + "/" + environment];
 }
