@@ -15,11 +15,11 @@
   "author": "Weston Catron",
   "license": "UNLICENSED",
   "dependencies": {
-    "@types/bluebird": "^3.0.37",
+    "@types/bluebird": "~3.0.0",
     "@types/express": "^4.0.34",
     "@types/redis": "^0.12.34",
     "@types/request": "0.0.39",
-    "bluebird": "^3.4.7",
+    "bluebird": "3.4.7",
     "body-parser": "^1.16.0",
     "download": "^6.2.2",
     "express": "^4.14.0",

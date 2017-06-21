@@ -1,4 +1,4 @@
-FROM mhart/alpine-node:7
+FROM mhart/alpine-node:7.10
 
 WORKDIR /heatworks-lab-local
 ADD src/ src/
