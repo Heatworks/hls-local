@@ -16,8 +16,9 @@ module.exports = function(app){
         var accessToken = req.query.accessToken
         client.get(accessToken, function (err, cached) {
             if (err || cached == null) {
-                console.log(`Refetching: ${accessToken}`);
+                console.log(`iam:fetching:${accessToken}`);
                 api.accessTokenGet(req.query.accessToken).then((response) => {
+                    console.log(`iam:caching:${accessToken}`);
                     res.send(response.body)
                     client.set(req.query.accessToken, JSON.stringify(response.body))
                 }).catch((err) => {
@@ -26,13 +27,14 @@ module.exports = function(app){
                     })
                 })
             } else {
-                console.log(`Cached: ${accessToken}`);
+                console.log(`iam:cached:${accessToken}`);
                 res.send(JSON.parse(cached))
             }
         })
     });
 
     app.delete('/iam/AccessToken', function(req, res) {
+        console.log(`iam:clear:${accessToken}`);
         var accessToken = req.query.accessToken
         client.del(accessToken);
         res.send({});

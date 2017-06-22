@@ -63,11 +63,12 @@ module.exports = function(app){
     })
    
     client.on("connect", () => {
-        console.log(`Successfully connected to MQTT client.`)
+        console.log(`scripts:mqtt:connected`)
     })
 
     client.on("error", (error) => {
-        console.log(`Error with MQTT client.`, error)
+        console.warn(error);
+        console.log(`scripts:mqtt:error:${error.message}`)
     })
 
     app.get('/scripts/Start', function(req, res) {
@@ -77,7 +78,7 @@ module.exports = function(app){
         }
         var scriptName = req.query.name;
         var environment = req.query.environment;
-        console.log(`Received request to start script: ${scriptName} with environment '${environment}'.`);                                                                                                        
+        console.log(`scripts:start:${scriptName}:'${environment}'`);  
         var runName;
         var script:Script;
         var scriptPath:string;
@@ -96,11 +97,11 @@ module.exports = function(app){
                 throw Error(`${script.name} with environment '${environment}' is already running.`);
             }
         }).then(() => {
-            console.log("Determining script path.");
+            console.log(` - Determining script path.'`);  
             var scriptNameSuffix = script.name.split('/scripts/')[1]
             scriptPath = `/tmp/hls/scripts/`+scriptNameSuffix;
             return new Promise((resolve, reject) => {
-                console.log("Generating script path if it does not exist.");
+                console.log(" - Generating script path if it does not exist.");
                 mkdirp(scriptPath, function (error) {
                     if (error) {
                         reject(error);
@@ -110,7 +111,7 @@ module.exports = function(app){
                 });
             })
         }).then(() => {
-            console.log("Checking latest script version against local files.");
+            console.log(" - Checking latest script version against local files.");
             return new Promise((resolve, reject) => {
                 redis_client.get(`${script.name}:version`, (err, value) => {
                     if (value == script.version) {
@@ -123,18 +124,18 @@ module.exports = function(app){
                 })
             }).then((needsToUpdate) => {
                 if (needsToUpdate) {
-                    console.log(`Downloading latest script files...`);
+                    console.log(` - Downloading latest script files...`);
                     return Promise.all(script.files.map((file) => {
-                        console.log(`Get file ${file}.`)
+                        console.log(` - Get file ${file}.`)
                         return api.fileGet(script.name, file).then((response) => {
-                            console.log(`Downloading file ${response.body["url"]} to ${scriptPath}/${file}...`)
+                            console.log(` - Downloading file ${response.body["url"]} to ${scriptPath}/${file}...`)
                             return download(response.body["url"], `${scriptPath}`);
                         })
                     })).then(() => {
-                        console.log(`Downloaded latest script files.`);
+                        console.log(` - Downloaded latest script files.`);
                     })
                 } else {
-                    console.log(`Script files meet current version (${script.version}).`);
+                    console.log(` - Script files meet current version (${script.version}).`);
                 }
                 return needsToUpdate;
             })
@@ -156,10 +157,9 @@ module.exports = function(app){
 
 
             var runScript = () => {
-                console.log(`Starting script ${script.name} with environment '${environment}'...`);                                                                                                        
+                console.log(`scripts:run:${scriptName}:'${environment}'`);  
                 runlog(client, runName, "Start")          
                 var finalizedEnvironment = Object.assign({}, defaults, script.defaultEnvironment.env, script.environments[environment].env, env);                                
-                console.log(`cd ${scriptPath} && ${npm} start`); 
 
                 var run_process = child_process.spawn('npm', ['start'], {             
                     cwd: scriptPath,                                                  
@@ -192,18 +192,17 @@ module.exports = function(app){
             }
             
             var installScript = () => { 
-                console.log(`Installing npm packages for ${script.name} with environment '${environment}'`);                                                     
-                console.log(`cd ${scriptPath} && ${npm} install`);
+                console.log(`scripts:install:${scriptName}:'${environment}'`);  
                 child_process.exec(npm+' install', {                                         
                     cwd: scriptPath                                                          
                 }, (error, stdout, stderr) => {                                              
                     if (error) {        
-                        console.error(` ${error}`);                                       
+                        console.error(error);                                       
                         res.status(400).send({"message": error})
                         return;                                          
                     }                                                                        
-                    console.log(`stdout: ${stdout}`);                                        
-                    console.log(`stderr: ${stderr}`);                                        
+                    console.log(`scripts:install:stdout:${stdout}`);                                        
+                    console.log(`scripts:install:stderr:${stderr}`);                                        
 
                     setTimeout(() => {                                                       
                         runScript.call(this)                                                 
@@ -213,8 +212,9 @@ module.exports = function(app){
 
             installScript()
         }).catch((error:Error) => {
+            console.error(error);
+            console.log(`scripts:error:${error.message}`)
             res.status(400).send({"message": error.message})
-            console.log(JSON.stringify(error))
         });
         
     });
@@ -228,7 +228,7 @@ module.exports = function(app){
             res.status(400).send({"message": `${runName} is not running.`})
             return;
         }
-        console.log('kill: '+runName);
+        console.log(`scripts:kill:${scriptName}:${environment}`);
         kill(run.process.pid, 'SIGKILL', () => {
             res.status(200).send({"message": `Stopped run ${runName}.`})
         })        

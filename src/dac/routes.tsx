@@ -24,15 +24,15 @@ module.exports = function(app){
                             console.warn(error)
                             return;
                         }
-                        console.log('Removed Cache: '+ file);
+                        console.log('dac:cache:remove:'+ file);
                     });
                 }).catch((error) => {
-                    console.log('Error Uploading Cache: '+ file);
+                    console.warn(error);
+                    console.log(`dac:cache:error:${file}:Error Uploading Cache`);
                     if (error.code == 'ENOTFOUND' && error.syscall == 'getaddrinfo') {
-                        console.log('Will retry indefinitly...');
+                        console.log(`dac:retry:${file}`);
                         update(file, false)
                     }
-                    console.warn(error);
                 })
             })
         }, 10000)
@@ -50,10 +50,12 @@ module.exports = function(app){
     });
 
     app.post('/dac/Recovery', function(req, res) {
+        console.log(`dac:recover`);
         var recoveredFiles = [];
         fs.readdir('/tmp/', (err, files) => {
             files.forEach((file) => {
                 if (/hls.dac.buffer.[0-9]+.csv/.test(file)) {
+                     console.log(`dac:recover:${file}`);
                     recoveredFiles.push(file);
                     update('/tmp/'+file, false);
                 }
@@ -76,7 +78,7 @@ function uploadData(data) {
             resolve()
         })
     }
-    console.log('Send data to server.')
+    console.log(`dac:cache:upload`)
     var fileName = 'hls.dac.'+new Date().toISOString()+'.csv';
     return api.dataPut(data, 'text/csv', process.env.HLS_ORGANIZATION_ID, fileName )
 }
@@ -84,6 +86,7 @@ function uploadData(data) {
 function createCacheFile() {
     var time = new Date().getTime();
     var newFile = `/tmp/hls.dac.buffer.${time}.csv`;
+    console.log(`dac:cache:create:${newFile}`)
     fs.writeFileSync(newFile, '')
     return newFile;
 }
