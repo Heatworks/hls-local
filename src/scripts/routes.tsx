@@ -23,6 +23,32 @@ class Script {
 var api = new ScriptsAPI.DefaultApi()
 api.setApiKey(ScriptsAPI.DefaultApiApiKeys.oAuth_2_0, process.env.HLS_ACCESS_TOKEN)
 
+var psTree = require('ps-tree');
+
+var kill = function (pid, signal, callback) {
+    signal   = signal || 'SIGKILL';
+    callback = callback || function () {};
+    var killTree = true;
+    if(killTree) {
+        psTree(pid, function (err, children) {
+            [pid].concat(
+                children.map(function (p) {
+                    return p.PID;
+                })
+            ).forEach(function (tpid) {
+                try { process.kill(tpid, signal) }
+                catch (ex) { }
+            });
+            callback();
+        });
+    } else {
+        try { process.kill(pid, signal) }
+        catch (ex) { }
+        callback();
+    }
+};
+
+
 module.exports = function(app){
     var currentRuns = {}
     var client = mqtt.connect(process.env.HLS_MQTT_BROKER, {
@@ -138,8 +164,8 @@ module.exports = function(app){
                 var run_process = child_process.spawn('npm', ['start'], {             
                     cwd: scriptPath,                                                  
                     env: finalizedEnvironment,
-                    shell: true,                                                             
-                    detatched: true                                                          
+                    shell: true,
+                    detatched: true                                       
                 })
                                                                                             
                 run_process.stdout.on('data', function (data) {                              
@@ -202,9 +228,10 @@ module.exports = function(app){
             res.status(400).send({"message": `${runName} is not running.`})
             return;
         }
-        console.log('End run: '+runName);
-        run.process.kill()
-        res.status(200).send({"message": `Stopped run ${runName}.`})
+        console.log('kill: '+runName);
+        kill(run.process.pid, 'SIGKILL', () => {
+            res.status(200).send({"message": `Stopped run ${runName}.`})
+        })        
     });
 
     app.get('/scripts/Status', function(req, res) {

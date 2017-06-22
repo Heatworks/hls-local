@@ -27,12 +27,11 @@
     "http": "0.0.0",
     "mkdirp": "^0.5.1",
     "mqtt": "^2.5.0",
+    "ps-tree": "^1.1.0",
     "redis": "^2.6.5",
     "request": "^2.79.0",
     "stats-webpack-plugin": "^0.4.2",
     "typescript": "2.1.1",
-    "webpack": "^1.14.0",
-    "webpack-dev-middleware": "^1.9.0",
     "whatwg-fetch": "^2.0.1"
   },
   "devDependencies": {
@@ -45,6 +44,7 @@
     "webpack": "^1.14.0",
     "webpack-dev-server": "^1.16.2",
     "webpack-hot-middleware": "^2.14.0",
-    "webpack-notifier": "^1.5.0"
+    "webpack-notifier": "^1.5.0",
+    "webpack-dev-middleware": "^1.9.0"
   }
 }
