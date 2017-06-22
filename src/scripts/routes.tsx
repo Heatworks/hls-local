@@ -239,12 +239,26 @@ module.exports = function(app){
         var environment = req.query.environment;
         var status = isScriptRunning(scriptName, environment);
         if (status) {
-            res.status(400).send({"message": `${scriptName}/${environment} is running.`, "status": true})
+            res.status(200).send({"message": `${scriptName}/${environment} is running.`, "status": true})
             return;
         } else {
-            res.status(400).send({"message": `${scriptName}/${environment} is not running.`, "status": false})
+            res.status(200).send({"message": `${scriptName}/${environment} is not running.`, "status": false})
             return;
         }
+    });
+
+    app.get('/scripts/Reset', function(req, res) {
+        var scriptName = req.query.name;
+        var environment = req.query.environment;
+        console.log(`scripts:reset:${scriptName}:${environment}`);
+        if (isScriptRunning(scriptName, environment)) {
+            res.status(500).send({"message": `${scriptName}/${environment} is running, it must be stopped in order to be reset.`})
+            return;
+        }
+        redis_client.del(`${scriptName}:version`, () => {
+            res.status(200).send({"message": `${scriptName} has been reset.`})
+            return;
+        })
     });
 }
                                                                                                      
