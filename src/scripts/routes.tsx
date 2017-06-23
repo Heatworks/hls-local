@@ -153,14 +153,16 @@ module.exports = function(app){
             }
             Object.keys(script.environments[environment].channels).forEach((channel) => {
                 env['channels.'+channel] = script.environments[environment].channels[channel];
+                env['channels/'+channel] = script.environments[environment].channels[channel];
+                env['channels-'+channel] = script.environments[environment].channels[channel];
             })
 
 
             var runScript = () => {
                 console.log(`scripts:run:${scriptName}:'${environment}'`);  
                 runlog(client, runName, "Start")          
-                var finalizedEnvironment = Object.assign({}, defaults, script.defaultEnvironment.env, script.environments[environment].env, env);                                
-
+                var finalizedEnvironment = Object.assign({}, defaults, script.defaultEnvironment.env, script.environments[environment].env, env);                        
+                        
                 var run_process = child_process.spawn('npm', ['start'], {             
                     cwd: scriptPath,                                                  
                     env: finalizedEnvironment,
