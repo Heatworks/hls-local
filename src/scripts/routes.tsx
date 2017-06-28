@@ -79,9 +79,13 @@ module.exports = function(app){
             res.status(500).send({"message": `Could not connect to MQTT client.`})
             return;
         }
+        var extraVariables = Object.assign({}, req.query);
         var scriptName = req.query.name;
         var environment = req.query.environment;
+        delete extraVariables["name"];
+        delete extraVariables["environment"];
         console.log(`scripts:start:${scriptName}:'${environment}'`);  
+        console.log(` - w/ variables: ${JSON.stringify(extraVariables)}`);
         var runName;
         var script:Script;
         var scriptPath:string;
@@ -160,11 +164,10 @@ module.exports = function(app){
                 env['channels-'+channel] = script.environments[environment].channels[channel];
             })
 
-
             var runScript = () => {
                 console.log(`scripts:run:${scriptName}:'${environment}'`);  
                 runlog(client, runName, "Start")          
-                var finalizedEnvironment = Object.assign({}, defaults, script.defaultEnvironment.env, script.environments[environment].env, env);                        
+                var finalizedEnvironment = Object.assign({}, defaults, script.defaultEnvironment.env, script.environments[environment].env, extraVariables, env);                        
                         
                 var run_process = child_process.spawn('npm', ['start'], {             
                     cwd: scriptPath,                                                  
