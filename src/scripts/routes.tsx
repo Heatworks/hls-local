@@ -4,6 +4,7 @@ const mkdirp = require("mkdirp");
 const fs = require('fs');
 const download = require('download');
 const mqtt = require("mqtt")
+var cors = require('cors')
 
 var child_process = require('child_process');
 
@@ -70,6 +71,8 @@ module.exports = function(app){
         console.warn(error);
         console.log(`scripts:mqtt:error:${error.message}`)
     })
+
+    app.use(cors())
 
     app.get('/scripts/Start', function(req, res) {
         if (client.connected == false) {
