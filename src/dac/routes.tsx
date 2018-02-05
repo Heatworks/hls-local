@@ -42,7 +42,7 @@ module.exports = function(app){
 
     app.post('/dac/Data', function(req, res) {
         res.status(200).send({})
-        fs.appendFileSync(currentFile, [req.body.organizationId, req.body.topic, req.body.payload ].join(",")+"\n", (err) => {
+        fs.appendFile(currentFile, [req.body.organizationId, req.body.topic, req.body.payload ].join(",")+"\n", (err) => {
             if (err) {
                 console.warn(err);
             }
