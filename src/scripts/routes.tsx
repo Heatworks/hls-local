@@ -162,6 +162,7 @@ module.exports = function(app){
                 env['channels.'+channel] = script.environments[environment].channels[channel];
                 env['channels/'+channel] = script.environments[environment].channels[channel];
                 env['channels-'+channel] = script.environments[environment].channels[channel];
+                env['channels_'+channel] = script.environments[environment].channels[channel];
             })
 
             var runScript = () => {
